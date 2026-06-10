@@ -1,6 +1,6 @@
 {
-  "name": "dich-truyen-reader-link-import",
-  "version": "0.2.0",
+  "name": "dich-truyen-real-ocr-overlay",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
