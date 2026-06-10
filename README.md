@@ -1,8 +1,9 @@
-# Dịch Truyện Ảnh Việt Hóa - Vercel Ready
 
-Project này đã có đủ thư mục `app/`, file `page.jsx`, `layout.jsx`, `globals.css`, và API route `/api/translate` để deploy lên Vercel.
+# Dịch Truyện Reader - Link Import
 
-## Cấu trúc đúng
+Bản này deploy được trên Vercel, có chế độ dán link chapter, import demo, dịch demo, và đọc ngay trong app.
+
+## Cấu trúc
 
 ```text
 package.json
@@ -12,23 +13,19 @@ app/
   page.jsx
   globals.css
   api/
-    translate/
-      route.js
-README.md
-.gitignore
-.env.example
+    import-chapter/route.js
+    translate-chapter/route.js
 ```
 
-## Deploy Vercel
+## Deploy
 
-1. Giải nén file zip.
-2. Upload toàn bộ file/thư mục bên trong lên GitHub repo.
-3. Vào Vercel → New Project → Import repo.
-4. Framework Preset: Next.js.
-5. Build Command: `npm run build`.
-6. Output Directory: để trống.
-7. Deploy.
+- Upload toàn bộ file/thư mục trong zip lên GitHub.
+- Vercel Framework Preset: Next.js.
+- Build Command: `npm run build`.
+- Output Directory: để trống.
 
-## Lưu ý
+## Ghi chú
 
-Bản này là bản demo chạy được trước. API OCR/dịch thật sẽ nối sau trong file `app/api/translate/route.js`.
+- Bản hiện tại dùng import/dịch demo để tránh lỗi deploy và đọc thử luồng.
+- Khi nối thật, sửa logic tại `app/api/import-chapter/route.js` và `app/api/translate-chapter/route.js`.
+- Chỉ sử dụng với nội dung bạn có quyền truy cập và phù hợp với điều khoản của nguồn nội dung.

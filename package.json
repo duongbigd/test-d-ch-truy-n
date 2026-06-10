@@ -1,6 +1,6 @@
 {
-  "name": "dich-truyen-anh-vercel-ready",
-  "version": "0.1.0",
+  "name": "dich-truyen-reader-link-import",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {

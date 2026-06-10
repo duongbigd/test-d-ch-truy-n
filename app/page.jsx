@@ -1,153 +1,164 @@
+
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 
-const stylePresets = {
-  literal: 'Sát nghĩa',
-  vietnameseStreet: 'Dân dã Việt Nam',
-  manga: 'Truyện tranh mượt',
-  harshSafe: 'Giữ độ gắt có kiểm soát',
-};
+const demoLink = 'https://weebcentral.com/series/demo/chapter-1';
 
 export default function Page() {
-  const inputRef = useRef(null);
-  const [images, setImages] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [sourceLang, setSourceLang] = useState('auto');
-  const [targetLang, setTargetLang] = useState('vi');
+  const [url, setUrl] = useState('');
   const [style, setStyle] = useState('vietnameseStreet');
-  const [profanityLevel, setProfanityLevel] = useState('medium');
-  const [redrawMode, setRedrawMode] = useState('textOnly');
-  const [keepNames, setKeepNames] = useState(true);
-  const [glossary, setGlossary] = useState('baka = đồ ngốc / ngốc thật đấy\nshit = chết tiệt / khỉ thật / cái quái gì\nyou bastard = đồ khốn / tên khốn');
-  const [log, setLog] = useState('');
-  const [result, setResult] = useState('');
+  const [mode, setMode] = useState('translatedBelow');
+  const [chapter, setChapter] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [running, setRunning] = useState(false);
+  const [log, setLog] = useState('');
+  const [readProgress, setReadProgress] = useState(0);
 
-  const selectedImage = useMemo(() => images.find((x) => x.id === selected) || images[0], [images, selected]);
+  const translatedCount = useMemo(() => {
+    if (!chapter?.pages) return 0;
+    return chapter.pages.filter((p) => p.translation).length;
+  }, [chapter]);
 
-  function addFiles(list) {
-    const files = Array.from(list || []).filter((f) => f.type.startsWith('image/'));
-    const mapped = files.map((f) => ({
-      id: `${Date.now()}-${f.name}-${Math.random()}`,
-      name: f.name,
-      url: URL.createObjectURL(f),
-      file: f,
-    }));
-    setImages((prev) => {
-      const next = [...prev, ...mapped];
-      if (!selected && next[0]) setSelected(next[0].id);
-      return next;
+  async function importChapter(useDemo = false) {
+    const targetUrl = useDemo ? demoLink : url.trim();
+    if (!targetUrl) return;
+    setLoading(true);
+    setLog('Đang import chapter...\n');
+    setProgress(10);
+
+    const res = await fetch('/api/import-chapter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl }),
     });
+    const data = await res.json();
+    setChapter(data.chapter);
+    setUrl(targetUrl);
+    setProgress(100);
+    setLog((prev) => `${prev}✓ Import xong: ${data.chapter.title}\n✓ Số trang: ${data.chapter.pages.length}\n`);
+    setLoading(false);
+    setTimeout(() => setProgress(0), 700);
   }
 
-  function clearAll() {
-    images.forEach((i) => URL.revokeObjectURL(i.url));
-    setImages([]);
-    setSelected(null);
-    setLog('');
-    setResult('');
+  async function translateChapter() {
+    if (!chapter) return;
+    setTranslating(true);
     setProgress(0);
-  }
+    setLog('Đang dịch toàn bộ chapter...\n');
 
-  async function runTranslate() {
-    if (!images.length) return;
-    setRunning(true);
-    setProgress(0);
-    setLog('');
-    setResult('');
+    const res = await fetch('/api/translate-chapter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chapter, style }),
+    });
+    const data = await res.json();
 
-    const steps = ['Upload ảnh', 'Nhận diện vùng chữ', 'OCR chữ trong bóng thoại', 'Dịch sát nghĩa', 'Việt hóa khẩu ngữ', 'Xuất kết quả'];
-    for (let i = 0; i < steps.length; i += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      setProgress(Math.round(((i + 1) / steps.length) * 100));
-      setLog((prev) => `${prev}✓ ${steps[i]}\n`);
+    for (let i = 0; i < data.pages.length; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      setProgress(Math.round(((i + 1) / data.pages.length) * 100));
+      setLog((prev) => `${prev}✓ Dịch trang ${i + 1}/${data.pages.length}\n`);
     }
 
-    const form = new FormData();
-    form.append('sourceLang', sourceLang);
-    form.append('targetLang', targetLang);
-    form.append('style', style);
-    form.append('profanityLevel', profanityLevel);
-    form.append('redrawMode', redrawMode);
-    form.append('keepNames', String(keepNames));
-    form.append('glossary', glossary);
-    images.forEach((img) => form.append('images', img.file));
-
-    const res = await fetch('/api/translate', { method: 'POST', body: form });
-    const data = await res.json();
-    setResult(data.text || 'Không có kết quả');
-    setRunning(false);
+    setChapter({ ...chapter, pages: data.pages, translatedAt: new Date().toISOString() });
+    setTranslating(false);
+    setTimeout(() => setProgress(0), 900);
   }
 
-  async function copy() {
-    await navigator.clipboard.writeText(result);
+  function markReading(pageNumber) {
+    if (!chapter?.pages?.length) return;
+    setReadProgress(Math.round((pageNumber / chapter.pages.length) * 100));
   }
 
-  function download() {
-    const blob = new Blob([result], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'ban-dich-truyen-anh.txt';
-    a.click();
-    URL.revokeObjectURL(url);
+  function saveLocal() {
+    if (!chapter) return;
+    localStorage.setItem('reader:lastChapter', JSON.stringify(chapter));
+    alert('Đã lưu chapter vào trình duyệt này.');
+  }
+
+  function loadLocal() {
+    const raw = localStorage.getItem('reader:lastChapter');
+    if (!raw) return alert('Chưa có chapter đã lưu.');
+    setChapter(JSON.parse(raw));
   }
 
   return (
-    <main className="container">
-      <section className="hero">
-        <div className="hero-row">
-          <div>
-            <h1>Dịch Truyện Ảnh Việt Hóa</h1>
-            <p>Upload trang truyện → OCR → dịch sát nghĩa, dân dã → xuất text/ảnh.</p>
-          </div>
-          <div className="badge">Mobile + Máy tính</div>
+    <main className="app">
+      <div className="topbar">
+        <div className="shell row">
+          <span className="pill">Reader dịch truyện</span>
+          <span className="small">Dán link → Import → Dịch → Lướt đọc trong app</span>
         </div>
-      </section>
+      </div>
 
-      <section className="grid">
-        <aside className="stack">
-          <div className="card stack">
-            <h2>Cấu hình dịch</h2>
-            <div className="row">
-              <label><span>Nguồn</span><select value={sourceLang} onChange={(e) => setSourceLang(e.target.value)}><option value="auto">Tự nhận diện</option><option value="ja">Japanese</option><option value="zh">Chinese</option><option value="ko">Korean</option><option value="en">English</option></select></label>
-              <label><span>Đích</span><select value={targetLang} onChange={(e) => setTargetLang(e.target.value)}><option value="vi">Tiếng Việt</option><option value="en">English</option></select></label>
-            </div>
-            <label><span>Văn phong</span><select value={style} onChange={(e) => setStyle(e.target.value)}>{Object.entries(stylePresets).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
-            <label><span>Mức câu chửi/khẩu ngữ</span><select value={profanityLevel} onChange={(e) => setProfanityLevel(e.target.value)}><option value="low">Nhẹ</option><option value="medium">Vừa - dân dã</option><option value="high">Mạnh có kiểm soát</option></select></label>
-            <label className="check">Giữ tên riêng/địa danh <input type="checkbox" checked={keepNames} onChange={(e) => setKeepNames(e.target.checked)} /></label>
-            <label><span>Cách xuất</span><select value={redrawMode} onChange={(e) => setRedrawMode(e.target.value)}><option value="textOnly">Chỉ xuất text</option><option value="overlay">Overlay chữ Việt lên ảnh</option><option value="clean">Xóa chữ cũ rồi chèn lại</option></select></label>
-          </div>
-          <div className="card note">Tool giữ sắc thái câu chửi theo bản gốc, nhưng không thêm lời miệt thị nhắm vào nhóm người thật. Nên dùng với nội dung bạn có quyền sử dụng.</div>
-        </aside>
-
-        <section className="stack">
-          <div className="card">
-            <div className="hero-row"><h2>Trang truyện ảnh</h2><div><button className="btn" onClick={() => inputRef.current?.click()}>Tải ảnh</button> <button className="btn secondary" onClick={clearAll}>Xóa</button></div></div>
-            <input ref={inputRef} type="file" accept="image/*" multiple hidden onChange={(e) => addFiles(e.target.files)} />
-            <div className="drop" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); addFiles(e.dataTransfer.files); }}>
-              {selectedImage ? <img className="preview" src={selectedImage.url} alt={selectedImage.name} /> : <div><h3>Kéo thả ảnh trang truyện vào đây</h3><p>Hoặc bấm Tải ảnh. Hỗ trợ điện thoại và máy tính.</p></div>}
-            </div>
-            {!!images.length && <div className="thumbs">{images.map((img, i) => <button key={img.id} className={`thumb ${selectedImage?.id === img.id ? 'active' : ''}`} onClick={() => setSelected(img.id)}><img src={img.url} alt={img.name} /><small>Trang {i + 1}</small></button>)}</div>}
-          </div>
-          <div className="card stack"><h2>Thuật ngữ & Việt hóa</h2><textarea value={glossary} onChange={(e) => setGlossary(e.target.value)} /></div>
+      <div className="shell">
+        <section className="hero">
+          <h1>Dịch Truyện Reader</h1>
+          <p>Tối ưu cho đọc cá nhân: nhập link chapter, tạo bản dịch tiếng Việt và đọc ngay trên điện thoại/máy tính.</p>
         </section>
 
-        <aside className="stack">
-          <div className="card stack">
-            <div className="hero-row"><h2>OCR & Dịch</h2><span>{progress}%</span></div>
-            <div className="progress"><div style={{ width: `${progress}%` }} /></div>
-            <button className="btn" disabled={running || !images.length} onClick={runTranslate}>{running ? 'Đang xử lý...' : 'OCR + Dịch trang truyện'}</button>
-            <textarea value={log} onChange={(e) => setLog(e.target.value)} placeholder="Log OCR sẽ hiện ở đây..." />
-          </div>
-          <div className="card stack"><h2>Bản dịch</h2><textarea style={{ minHeight: 300 }} value={result} onChange={(e) => setResult(e.target.value)} placeholder="Bản dịch theo bóng thoại sẽ hiện ở đây..." />
-            <div className="actions"><button className="btn secondary" disabled={!result} onClick={copy}>Copy</button><button className="btn indigo" disabled={!result} onClick={download}>Tải .txt</button></div>
-          </div>
-        </aside>
-      </section>
-      <p className="footer">Bản đầu là web app deploy được. API hiện mock; sau đó có thể nối OCR/model dịch thật.</p>
+        <section className="grid">
+          <aside className="stack">
+            <div className="card stack">
+              <h2>1. Nhập link chapter</h2>
+              <input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Dán link chapter vào đây..." />
+              <button className="btn" disabled={loading || !url.trim()} onClick={() => importChapter(false)}>{loading ? 'Đang import...' : 'Import link'}</button>
+              <button className="btn secondary" onClick={() => importChapter(true)}>Dùng demo reader</button>
+              <p className="small">Bản này import demo để app chạy ổn trước. Sau đó có thể nối module lấy trang hợp lệ và OCR/dịch thật.</p>
+            </div>
+
+            <div className="card stack">
+              <h2>2. Cấu hình dịch</h2>
+              <label><span className="small">Văn phong</span><select className="select" value={style} onChange={(e) => setStyle(e.target.value)}><option value="literal">Sát nghĩa</option><option value="vietnameseStreet">Dân dã Việt Nam</option><option value="manga">Truyện tranh mượt</option><option value="harshSafe">Giữ độ gắt có kiểm soát</option></select></label>
+              <label><span className="small">Cách đọc</span><select className="select" value={mode} onChange={(e) => setMode(e.target.value)}><option value="translatedBelow">Ảnh gốc + bản dịch dưới ảnh</option><option value="translationOnly">Chỉ đọc bản dịch text</option><option value="originalOnly">Chỉ ảnh gốc</option></select></label>
+              <button className="btn green" disabled={!chapter || translating} onClick={translateChapter}>{translating ? 'Đang dịch...' : 'Dịch toàn bộ chapter'}</button>
+              <div className="progress"><div style={{ width: `${progress}%` }} /></div>
+              <textarea className="input" style={{ minHeight: 150 }} value={log} onChange={(e) => setLog(e.target.value)} placeholder="Log xử lý..." />
+            </div>
+
+            <div className="card stack warn">
+              <b>Lưu ý sử dụng</b>
+              <span>App được thiết kế cho nhu cầu đọc cá nhân và nội dung bạn có quyền truy cập/sử dụng. Không nên dùng để phát tán lại nội dung không được phép.</span>
+            </div>
+          </aside>
+
+          <section className="stack">
+            <div className="card">
+              <div className="reader-tools">
+                <div>
+                  <h2 className="chapter-title">{chapter ? chapter.title : 'Chưa có chapter'}</h2>
+                  <div className="small">{chapter ? `${chapter.source} • ${chapter.pages.length} trang • Đã dịch ${translatedCount}/${chapter.pages.length}` : 'Import link hoặc dùng demo để bắt đầu.'}</div>
+                </div>
+                <div className="row">
+                  <button className="btn secondary" onClick={loadLocal}>Mở bản lưu</button>
+                  <button className="btn indigo" disabled={!chapter} onClick={saveLocal}>Lưu</button>
+                </div>
+              </div>
+              <div className="progress"><div style={{ width: `${readProgress}%` }} /></div>
+              <p className="small">Tiến độ đọc: {readProgress}%</p>
+
+              {chapter ? (
+                <div className="toc">
+                  {chapter.pages.map((page) => <a key={page.number} href={`#page-${page.number}`}>Trang {page.number}</a>)}
+                </div>
+              ) : <div className="empty"><div><h3>Reader đang chờ dữ liệu</h3><p>Dán link chapter hoặc bấm “Dùng demo reader”.</p></div></div>}
+            </div>
+
+            {chapter?.pages?.map((page) => (
+              <article className="page-card" key={page.number} id={`page-${page.number}`} onMouseEnter={() => markReading(page.number)} onTouchStart={() => markReading(page.number)}>
+                {mode !== 'translationOnly' && <img className="page-img" src={page.imageUrl} alt={`Trang ${page.number}`} />}
+                <div className="page-meta">
+                  <b>Trang {page.number}</b>
+                  {mode !== 'originalOnly' && <div className="translation">{page.translation || 'Chưa dịch trang này. Bấm “Dịch toàn bộ chapter”.'}</div>}
+                </div>
+              </article>
+            ))}
+          </section>
+        </section>
+
+        <p className="footer">Bản reader import link demo. Bước sau: nối OCR/model dịch thật và module import nguồn hợp lệ.</p>
+      </div>
     </main>
   );
 }
